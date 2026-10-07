@@ -62,3 +62,4 @@ Unity 中只保留一个 MobilePoserPoseSource，初始基线保持：
     archive/               非当前主线的历史实验
 
 训练、camera fusion、Android 导出和旧实验不是当前实时主线，只有在对应文档明确引用时才使用。
+# Slimevr
