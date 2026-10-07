@@ -1,0 +1,12 @@
+layout: wrists_shanks_waist
+fps: 30
+window: 45
+output_index: 40
+acceleration_scale: 30.0
+output_port: 21200
+solarxr_endpoint: ws://127.0.0.1:21110
+checkpoint_root: checkpoints/no_head_5imu_surface
+calibration_frames: 150
+upright_calibration_frames: 30
+upright_settle_seconds: 3.0
+output_lag_frames: 4

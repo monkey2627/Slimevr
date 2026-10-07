@@ -1,0 +1,7 @@
+purpose: real_slimevr_five_imu_finetune
+layout: wrists_shanks_waist
+checkpoint_root: checkpoints/no_head_5imu_surface
+output_root: results/ours_multi_finetune
+seed: 42
+epochs: 120
+learning_rate: 0.0003
