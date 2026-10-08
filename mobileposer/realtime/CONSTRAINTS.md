@@ -1,10 +1,9 @@
 # Runtime constraints
 
-The MobilePoser Unity receiver keeps all post-processing disabled by default.
-The browser viewer can change the optional switches while the local pose stream
-is running. Open `http://127.0.0.1:8765/`, expand `Runtime constraints`, and
-change one option at a time. Settings are sent over the existing pose WebSocket
-and are applied by `MobilePoserPoseSource`.
+The MobilePoser Unity receiver keeps post-processing disabled by default.
+During Play mode, use the `MobilePoser runtime constraints` panel in the Unity
+Game view. The browser viewer remains for stick-figure display, recording,
+replay, and input comparison; it does not control Unity constraints.
 
 Available controls:
 
@@ -16,15 +15,27 @@ Available controls:
 - `Knee direction`: use the calibrated neutral-pose knee plane as the IK pole.
 - `Contact foot IK`: solve a contacting hip-knee-ankle chain toward the floor.
 - `Foot grounding`: calibrate and maintain the relative floor plane.
+- `Calibrate T-pose`: capture a T-pose baseline and map it to the Avatar's
+  cached startup/reset rotations.
+- `Calibrate relaxed arms`: record the complete natural-standing model
+  baseline. Unity uses the raw-model correction for the whole body near this
+  baseline and blends toward the T-pose correction only as the shoulders move
+  toward the T-pose baseline.
 
 Recommended A/B order:
 
-1. Enable `Temporal smoothing` only.
-2. Add `Knee direction` and `Bone lengths`.
-3. Enable `Foot grounding`, then `Contact foot IK`.
-4. Test `Joint limits`, `Knee guard`, and `Tracker anchors` separately.
+1. Click `Reset`, stand with relaxed arms, then click `Calibrate relaxed arms`;
+   remain still until capture completes.
+2. Stand in T-pose and click `Calibrate T-pose`; remain still until capture
+   completes.
+3. Enable `Temporal smoothing` only.
+4. Add `Knee direction` and `Bone lengths`.
+5. Enable `Foot grounding`, then `Contact foot IK`.
+6. Test `Joint limits`, `Knee guard`, and `Tracker anchors` separately.
 
-The controls change the Unity post-processing only; they do not alter the
-MobilePose checkpoint or the Python model output. Foot IK requires a calibrated
-relative floor and contact probabilities. If the Python stream does not include
-foot contact, that constraint remains inactive.
+The controls change Unity post-processing only; they do not alter the MobilePose
+checkpoint or Python model output. The two calibrations are rotation offsets,
+not a pose estimator: they reduce mismatch between T-pose and natural-standing
+outputs but do not guarantee arbitrary live poses. Foot IK requires a calibrated relative floor and
+contact probabilities. If the Python stream does not include foot contact,
+that constraint remains inactive.

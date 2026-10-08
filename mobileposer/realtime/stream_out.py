@@ -29,37 +29,8 @@ class PoseBroadcaster:
     async def _handler(self, websocket) -> None:
         self._clients.add(websocket)
         try:
-            async for raw in websocket:
-                try:
-                    command = json.loads(raw)
-                except (TypeError, json.JSONDecodeError):
-                    continue
-                if command.get("type") != "constraints":
-                    continue
-                payload = json.dumps({
-                    "type": "constraints",
-                    "useTrackerAnchors": bool(command.get("useTrackerAnchors", False)),
-                    "enforceJointLimits": bool(command.get("enforceJointLimits", False)),
-                    "guardKneeHyperextension": bool(command.get("guardKneeHyperextension", False)),
-                    "useTemporalSmoothing": bool(command.get("useTemporalSmoothing", False)),
-                    "enforceBoneLengths": bool(command.get("enforceBoneLengths", False)),
-                    "useKneeDirectionConstraint": bool(command.get("useKneeDirectionConstraint", False)),
-                    "useFootIk": bool(command.get("useFootIk", False)),
-                    "useRelativeFootGrounding": bool(command.get("useRelativeFootGrounding", False)),
-                    "trackerAnchorWeight": float(command.get("trackerAnchorWeight", 0.65)),
-                    "temporalSmoothing": float(command.get("temporalSmoothing", 0.35)),
-                    "kneeDirectionWeight": float(command.get("kneeDirectionWeight", 0.65)),
-                    "footIkWeight": float(command.get("footIkWeight", 0.8)),
-                })
-                stale = []
-                for client in self._clients:
-                    try:
-                        await client.send(payload)
-                    except (websockets.ConnectionClosed, ConnectionAbortedError,
-                            ConnectionResetError, OSError):
-                        stale.append(client)
-                for client in stale:
-                    self._clients.discard(client)
+            async for _ in websocket:  # send-only channel; ignore inbound data
+                pass
         finally:
             self._clients.discard(websocket)
 

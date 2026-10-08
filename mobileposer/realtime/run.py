@@ -267,6 +267,26 @@ async def main_async(args: argparse.Namespace) -> None:
     resolved = await _wait_for_layout(tracker_stream, latest)
 
     checkpoint = normalize_checkpoint_path(args.checkpoint) if args.checkpoint is not None else None
+    contact_model = None
+    if args.include_contact:
+        contact_sources = []
+        if checkpoint is not None:
+            contact_sources.append(checkpoint)
+        contact_sources.append(
+            Path("results/ours_multi_finetune/layouts")
+            / resolved.name / "model_finetuned.pth"
+        )
+        contact_sources.append(args.checkpoint_root / resolved.name / "1" / "base_model.pth")
+        for contact_source in contact_sources:
+            try:
+                contact_model = load_foot_contact(contact_source)
+                print(f"Foot contact head loaded from: {contact_source}", file=sys.stderr)
+                break
+            except (ValueError, FileNotFoundError) as exc:
+                print(f"Foot contact head unavailable in {contact_source}: {exc}", file=sys.stderr)
+        if contact_model is None:
+            print("Warning: no foot-contact head found; continuing without footContact data.",
+                  file=sys.stderr)
     recorder = None
     if args.record is not None:
         recorder = RealtimeRecorder(args.record, {
@@ -322,9 +342,6 @@ async def main_async(args: argparse.Namespace) -> None:
     # the actual checkpoint file rather than a filename containing `“`/`”`.
     model = (MobilePose().load_combined(checkpoint) if checkpoint is not None
              else load_model(resolved.name, args.checkpoint_root))
-    contact_model = load_foot_contact(checkpoint) if args.include_contact and checkpoint is not None else None
-    if args.include_contact and contact_model is None:
-        contact_model = load_foot_contact(args.checkpoint_root / resolved.name / "1" / "base_model.pth")
     session = InferenceSession(layout=resolved, model=model, heading=heading)
     if upright_reference is not None:
         session.prime(*upright_reference)

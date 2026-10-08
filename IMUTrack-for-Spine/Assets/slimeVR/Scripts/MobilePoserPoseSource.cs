@@ -61,7 +61,9 @@ namespace SpineFlow.MobilePoser
         [Tooltip("Show incoming frame/timestamp/model-lag diagnostics without changing the pose.")]
         [SerializeField] private bool showPoseDiagnostics = false;
         [Tooltip("Show runtime constraint switches in the Unity Game view.")]
-        [SerializeField] private bool showConstraintControls = false;
+        [SerializeField] private bool showConstraintControls = true;
+        [Tooltip("Number of unique model frames averaged by the standing-pose calibration.")]
+        [SerializeField, Min(5)] private int standingCalibrationFrames = 30;
         [Tooltip("Calibrate a relative floor from the initial contacting feet and correct the avatar root.")]
         [SerializeField] private bool useRelativeFootGrounding = false;
         [SerializeField] private float contactEngageThreshold = 0.8f;
@@ -154,6 +156,20 @@ namespace SpineFlow.MobilePoser
         private bool trackerAnchorsCalibrated;
         private readonly float[] boneLengths = new float[JointCount];
         private readonly Quaternion[] smoothedSmplWorldRotation = new Quaternion[JointCount];
+        private readonly Quaternion[] standingCalibrationFirst = new Quaternion[JointCount];
+        private readonly Quaternion[] standingCalibrationCorrection = new Quaternion[JointCount];
+        private readonly Quaternion[] relaxedArmCorrection = new Quaternion[JointCount];
+        private readonly Quaternion[] avatarResetTargetWorld = new Quaternion[JointCount];
+        private readonly Quaternion[] tPoseArmBaseline = new Quaternion[2];
+        private readonly Quaternion[] relaxedArmBaseline = new Quaternion[2];
+        private readonly float[] standingCalibrationSums = new float[JointCount * 4];
+        private bool standingCalibrationInProgress;
+        private int standingCalibrationSampleCount;
+        private int standingCalibrationLastFrame = -1;
+        private int standingCalibrationMode;
+        private bool hasTPoseCalibration;
+        private bool hasRelaxedArmCalibration;
+        private string standingCalibrationStatus = "Arm calibration: not calibrated";
         private bool hasSmoothedPose;
         private Vector3 leftKneePole;
         private Vector3 rightKneePole;
@@ -241,7 +257,7 @@ namespace SpineFlow.MobilePoser
             const float x = 12f;
             const float y = 116f;
             const float width = 360f;
-            GUI.Box(new Rect(x, y, width, 300f), "MobilePoser constraints");
+            GUI.Box(new Rect(x, y, width, 410f), "MobilePoser runtime constraints");
             useTrackerAnchors = GUI.Toggle(new Rect(x + 12f, y + 24f, width - 24f, 22f),
                 useTrackerAnchors, "Tracker anchors");
             enforceJointLimits = GUI.Toggle(new Rect(x + 12f, y + 48f, width - 24f, 22f),
@@ -260,14 +276,37 @@ namespace SpineFlow.MobilePoser
                 useRelativeFootGrounding, "Foot grounding");
             showRelativeGroundGuide = GUI.Toggle(new Rect(x + 12f, y + 216f, width - 24f, 22f),
                 showRelativeGroundGuide, "Ground guide");
-            GUI.Label(new Rect(x + 12f, y + 242f, width - 24f, 20f),
+            if (GUI.Button(new Rect(x + 12f, y + 240f, 105f, 28f), "Calibrate T-pose"))
+                BeginStandingCalibration(0);
+            if (GUI.Button(new Rect(x + 125f, y + 240f, 135f, 28f), "Calibrate relaxed arms"))
+                BeginStandingCalibration(1);
+            if (GUI.Button(new Rect(x + 268f, y + 240f, 73f, 28f), "Reset"))
+                ResetStandingCalibration();
+            GUI.Label(new Rect(x + 12f, y + 270f, width - 24f, 20f), standingCalibrationStatus);
+            GUI.Label(new Rect(x + 12f, y + 294f, width - 24f, 20f),
                 $"Anchor {trackerAnchorWeight:0.00}  Smooth {temporalSmoothing:0.00}  IK {footIkWeight:0.00}");
-            trackerAnchorWeight = GUI.HorizontalSlider(new Rect(x + 12f, y + 262f, 105f, 18f),
+            trackerAnchorWeight = GUI.HorizontalSlider(new Rect(x + 12f, y + 314f, 105f, 18f),
                 trackerAnchorWeight, 0f, 1f);
-            temporalSmoothing = GUI.HorizontalSlider(new Rect(x + 124f, y + 262f, 105f, 18f),
+            temporalSmoothing = GUI.HorizontalSlider(new Rect(x + 124f, y + 314f, 105f, 18f),
                 temporalSmoothing, 0f, 1f);
-            footIkWeight = GUI.HorizontalSlider(new Rect(x + 236f, y + 262f, 105f, 18f),
+            footIkWeight = GUI.HorizontalSlider(new Rect(x + 236f, y + 314f, 105f, 18f),
                 footIkWeight, 0f, 1f);
+            string contact = LeftFootContact < 0f || RightFootContact < 0f
+                ? "Foot contact: unavailable"
+                : $"Foot contact: L {LeftFootContact:0.00} / R {RightFootContact:0.00}";
+            GUI.Label(new Rect(x + 12f, y + 338f, 210f, 20f), contact);
+            if (GUI.Button(new Rect(x + 235f, y + 350f, 106f, 24f), "Reset constraints"))
+            {
+                useTrackerAnchors = false;
+                enforceJointLimits = false;
+                guardKneeHyperextension = false;
+                useTemporalSmoothing = false;
+                enforceBoneLengths = false;
+                useKneeDirectionConstraint = false;
+                useFootIk = false;
+                useRelativeFootGrounding = false;
+                showRelativeGroundGuide = false;
+            }
         }
 
         private void Awake()
@@ -311,6 +350,13 @@ namespace SpineFlow.MobilePoser
             CacheBoneLengths();
             leftKneePole = KneePoleDirection(1, 4, 7);
             rightKneePole = KneePoleDirection(2, 5, 8);
+            for (int i = 0; i < JointCount; i++)
+            {
+                standingCalibrationCorrection[i] = Quaternion.identity;
+                relaxedArmCorrection[i] = Quaternion.identity;
+            }
+            hasTPoseCalibration = false;
+            hasRelaxedArmCalibration = false;
         }
 
         private void CacheBoneLengths()
@@ -364,6 +410,7 @@ namespace SpineFlow.MobilePoser
                     ? local
                     : smplWorldRotation[parent] * local;
             }
+            CaptureStandingCalibrationFrame();
             if (useTemporalSmoothing)
             {
                 float blend = Mathf.Clamp01(1f - temporalSmoothing);
@@ -388,7 +435,14 @@ namespace SpineFlow.MobilePoser
                 if (retargetThroughGlobalBindPose)
                 {
                     // targetGlobal = animationDeltaGlobal * targetRestGlobal.
-                    t.rotation = smoothedSmplWorldRotation[i] * restWorldRotation[i];
+                    Quaternion correction = standingCalibrationCorrection[i];
+                    if (hasRelaxedArmCalibration)
+                    {
+                        float poseBlend = ArmCalibrationBlend(i);
+                        correction = Quaternion.Slerp(relaxedArmCorrection[i],
+                            standingCalibrationCorrection[i], poseBlend);
+                    }
+                    t.rotation = correction * smoothedSmplWorldRotation[i] * restWorldRotation[i];
                 }
                 else
                 {
@@ -461,6 +515,140 @@ namespace SpineFlow.MobilePoser
                     target = Quaternion.Slerp(bone.rotation, target, trackerAnchorMaxAngle / angle);
                 bone.rotation = Quaternion.Slerp(bone.rotation, target, weight);
             }
+        }
+
+        private void BeginStandingCalibration(int mode)
+        {
+            if (!retargetThroughGlobalBindPose)
+            {
+                standingCalibrationStatus = "Calibration requires global retargeting";
+                return;
+            }
+            if (animator == null)
+            {
+                standingCalibrationStatus = "Standing calibration: Animator unavailable";
+                return;
+            }
+            if (!BuildAvatarResetTarget(mode)) return;
+            Array.Clear(standingCalibrationSums, 0, standingCalibrationSums.Length);
+            standingCalibrationSampleCount = 0;
+            standingCalibrationLastFrame = -1;
+            standingCalibrationMode = mode;
+            standingCalibrationInProgress = true;
+            standingCalibrationStatus = mode == 0
+                ? "Capturing T-pose baseline"
+                : "Capturing relaxed-arm baseline";
+        }
+
+        private void ResetStandingCalibration()
+        {
+            standingCalibrationInProgress = false;
+            standingCalibrationSampleCount = 0;
+            standingCalibrationLastFrame = -1;
+            for (int i = 0; i < JointCount; i++)
+            {
+                standingCalibrationCorrection[i] = Quaternion.identity;
+                relaxedArmCorrection[i] = Quaternion.identity;
+            }
+            hasTPoseCalibration = false;
+            hasRelaxedArmCalibration = false;
+            standingCalibrationStatus = "Arm calibration: not calibrated";
+        }
+
+        private void CaptureStandingCalibrationFrame()
+        {
+            if (!standingCalibrationInProgress) return;
+            int frame;
+            lock (sync) frame = latestFrame;
+            if (frame < 0 || frame == standingCalibrationLastFrame) return;
+            standingCalibrationLastFrame = frame;
+
+            for (int i = 0; i < JointCount; i++)
+            {
+                Quaternion q = smplWorldRotation[i];
+                if (standingCalibrationSampleCount == 0)
+                    standingCalibrationFirst[i] = q;
+                else if (Quaternion.Dot(standingCalibrationFirst[i], q) < 0f)
+                    q = new Quaternion(-q.x, -q.y, -q.z, -q.w);
+
+                int o = i * 4;
+                standingCalibrationSums[o] += q.x;
+                standingCalibrationSums[o + 1] += q.y;
+                standingCalibrationSums[o + 2] += q.z;
+                standingCalibrationSums[o + 3] += q.w;
+            }
+            standingCalibrationSampleCount++;
+            standingCalibrationStatus = $"Capturing arm baseline {standingCalibrationSampleCount}/" +
+                $"{Mathf.Max(5, standingCalibrationFrames)} - hold still";
+            if (standingCalibrationSampleCount < Mathf.Max(5, standingCalibrationFrames)) return;
+
+            for (int i = 0; i < JointCount; i++)
+            {
+                int o = i * 4;
+                Quaternion mean = new Quaternion(standingCalibrationSums[o],
+                    standingCalibrationSums[o + 1], standingCalibrationSums[o + 2],
+                    standingCalibrationSums[o + 3]);
+                mean.Normalize();
+                if (boneTransforms[i] == null)
+                {
+                    if (standingCalibrationMode == 0) standingCalibrationCorrection[i] = Quaternion.identity;
+                    else relaxedArmCorrection[i] = Quaternion.identity;
+                    continue;
+                }
+                Quaternion predictedBaseline = mean * restWorldRotation[i];
+                Quaternion correction = avatarResetTargetWorld[i] * Quaternion.Inverse(predictedBaseline);
+                if (standingCalibrationMode == 0)
+                    standingCalibrationCorrection[i] = correction;
+                // The realtime model already produces the relaxed-arm baseline
+                // correctly. Keep this branch at identity rather than copying
+                // the pose visible when the button was pressed; copying that
+                // pose can preserve a stale T-pose correction and lift the arms.
+                if (standingCalibrationMode == 1)
+                    relaxedArmCorrection[i] = Quaternion.identity;
+                if (standingCalibrationMode == 0 && (i == 16 || i == 17))
+                    tPoseArmBaseline[i == 16 ? 0 : 1] = mean;
+                if (standingCalibrationMode == 1 && (i == 16 || i == 17))
+                    relaxedArmBaseline[i == 16 ? 0 : 1] = mean;
+            }
+            standingCalibrationInProgress = false;
+            if (standingCalibrationMode == 0) hasTPoseCalibration = true;
+            if (standingCalibrationMode == 1) hasRelaxedArmCalibration = true;
+            standingCalibrationStatus = standingCalibrationMode == 0
+                ? "T-pose calibration complete"
+                : "Relaxed-arm calibration complete";
+        }
+
+        private bool BuildAvatarResetTarget(int mode)
+        {
+            // The Avatar's cached startup pose is the authoritative reset pose.
+            // Do not synthesize a T-pose or arm-down pose: Humanoid rigs can have
+            // different bind poses and joint axes.
+            for (int i = 0; i < JointCount; i++)
+                avatarResetTargetWorld[i] = boneTransforms[i] != null
+                    ? restWorldRotation[i]
+                    : Quaternion.identity;
+            return true;
+        }
+
+        private static bool IsArmJoint(int index)
+        {
+            return index == 16 || index == 17 || index == 18 || index == 19 || index == 20 || index == 21;
+        }
+
+        private float ArmCalibrationBlend(int index)
+        {
+            if (!hasTPoseCalibration) return 0f;
+            if (!hasRelaxedArmCalibration) return 1f;
+            float leftToT = Quaternion.Angle(smoothedSmplWorldRotation[16], tPoseArmBaseline[0]);
+            float leftToRelaxed = Quaternion.Angle(smoothedSmplWorldRotation[16], relaxedArmBaseline[0]);
+            float rightToT = Quaternion.Angle(smoothedSmplWorldRotation[17], tPoseArmBaseline[1]);
+            float rightToRelaxed = Quaternion.Angle(smoothedSmplWorldRotation[17], relaxedArmBaseline[1]);
+            float toT = 0.5f * (leftToT + rightToT);
+            float toRelaxed = 0.5f * (leftToRelaxed + rightToRelaxed);
+            float denominator = toT + toRelaxed;
+            // Slerp(relaxed, tPose, blend): relaxed input must produce 0,
+            // while T-pose input must produce 1.
+            return denominator > 0.001f ? Mathf.Clamp01(toRelaxed / denominator) : 0.5f;
         }
 
         private void ApplyJointConstraints()
@@ -748,11 +936,6 @@ namespace SpineFlow.MobilePoser
                 return; // malformed/partial frame; drop it and keep the connection alive
             }
             if (frame == null) return;
-            if (frame.type == "constraints")
-            {
-                ApplyRemoteConstraints(frame);
-                return;
-            }
             if (frame.joints == null || frame.joints.Length != JointCount * 4) return;
 
             lock (sync)
@@ -773,22 +956,6 @@ namespace SpineFlow.MobilePoser
             }
         }
 
-        private void ApplyRemoteConstraints(PoseFrame frame)
-        {
-            useTrackerAnchors = frame.useTrackerAnchors;
-            enforceJointLimits = frame.enforceJointLimits;
-            guardKneeHyperextension = frame.guardKneeHyperextension;
-            useTemporalSmoothing = frame.useTemporalSmoothing;
-            enforceBoneLengths = frame.enforceBoneLengths;
-            useKneeDirectionConstraint = frame.useKneeDirectionConstraint;
-            useFootIk = frame.useFootIk;
-            useRelativeFootGrounding = frame.useRelativeFootGrounding;
-            trackerAnchorWeight = Mathf.Clamp01(frame.trackerAnchorWeight);
-            temporalSmoothing = Mathf.Clamp01(frame.temporalSmoothing);
-            kneeDirectionWeight = Mathf.Clamp01(frame.kneeDirectionWeight);
-            footIkWeight = Mathf.Clamp01(frame.footIkWeight);
-        }
-
         private void SetError(string error)
         {
             lock (sync) lastError = error;
@@ -802,7 +969,6 @@ namespace SpineFlow.MobilePoser
         [Serializable]
         private class PoseFrame
         {
-            public string type;
             public int frame;
             public string layout;
             public float[] joints;
@@ -819,18 +985,6 @@ namespace SpineFlow.MobilePoser
             public double receiveMonotonicSeconds;
             public double inferenceStartMonotonicSeconds;
             public double inferenceEndMonotonicSeconds;
-            public bool useTrackerAnchors;
-            public bool enforceJointLimits;
-            public bool guardKneeHyperextension;
-            public bool useTemporalSmoothing;
-            public bool enforceBoneLengths;
-            public bool useKneeDirectionConstraint;
-            public bool useFootIk;
-            public bool useRelativeFootGrounding;
-            public float trackerAnchorWeight;
-            public float temporalSmoothing;
-            public float kneeDirectionWeight;
-            public float footIkWeight;
         }
     }
 }
