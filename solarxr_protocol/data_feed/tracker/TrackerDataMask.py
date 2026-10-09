@@ -116,8 +116,14 @@ class TrackerDataMask(object):
             return bool(self._tab.Get(flatbuffers.number_types.BoolFlags, o + self._tab.Pos))
         return False
 
+    def ReferenceAdjustedLinearAcceleration(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(30))
+        if o != 0:
+            return bool(self._tab.Get(flatbuffers.number_types.BoolFlags, o + self._tab.Pos))
+        return False
+
 def TrackerDataMaskStart(builder):
-    builder.StartObject(13)
+    builder.StartObject(14)
 
 def Start(builder):
     TrackerDataMaskStart(builder)
@@ -200,6 +206,12 @@ def TrackerDataMaskAddStayAligned(builder, stayAligned):
 def AddStayAligned(builder, stayAligned):
     TrackerDataMaskAddStayAligned(builder, stayAligned)
 
+def TrackerDataMaskAddReferenceAdjustedLinearAcceleration(builder, referenceAdjustedLinearAcceleration):
+    builder.PrependBoolSlot(13, referenceAdjustedLinearAcceleration, 0)
+
+def AddReferenceAdjustedLinearAcceleration(builder, referenceAdjustedLinearAcceleration):
+    TrackerDataMaskAddReferenceAdjustedLinearAcceleration(builder, referenceAdjustedLinearAcceleration)
+
 def TrackerDataMaskEnd(builder):
     return builder.EndObject()
 
@@ -225,6 +237,7 @@ class TrackerDataMaskT(object):
         tps = False,
         rawMagneticVector = False,
         stayAligned = False,
+        referenceAdjustedLinearAcceleration = False,
     ):
         self.info = info  # type: bool
         self.status = status  # type: bool
@@ -239,6 +252,7 @@ class TrackerDataMaskT(object):
         self.tps = tps  # type: bool
         self.rawMagneticVector = rawMagneticVector  # type: bool
         self.stayAligned = stayAligned  # type: bool
+        self.referenceAdjustedLinearAcceleration = referenceAdjustedLinearAcceleration  # type: bool
 
     @classmethod
     def InitFromBuf(cls, buf, pos):
@@ -274,6 +288,7 @@ class TrackerDataMaskT(object):
         self.tps = trackerDataMask.Tps()
         self.rawMagneticVector = trackerDataMask.RawMagneticVector()
         self.stayAligned = trackerDataMask.StayAligned()
+        self.referenceAdjustedLinearAcceleration = trackerDataMask.ReferenceAdjustedLinearAcceleration()
 
     # TrackerDataMaskT
     def Pack(self, builder):
@@ -291,5 +306,6 @@ class TrackerDataMaskT(object):
         TrackerDataMaskAddTps(builder, self.tps)
         TrackerDataMaskAddRawMagneticVector(builder, self.rawMagneticVector)
         TrackerDataMaskAddStayAligned(builder, self.stayAligned)
+        TrackerDataMaskAddReferenceAdjustedLinearAcceleration(builder, self.referenceAdjustedLinearAcceleration)
         trackerDataMask = TrackerDataMaskEnd(builder)
         return trackerDataMask

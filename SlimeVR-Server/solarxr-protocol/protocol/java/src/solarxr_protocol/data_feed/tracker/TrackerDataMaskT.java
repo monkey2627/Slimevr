@@ -21,6 +21,7 @@ public class TrackerDataMaskT {
   private boolean tps;
   private boolean rawMagneticVector;
   private boolean stayAligned;
+  private boolean referenceAdjustedLinearAcceleration;
 
   public boolean getInfo() { return info; }
 
@@ -74,6 +75,10 @@ public class TrackerDataMaskT {
 
   public void setStayAligned(boolean stayAligned) { this.stayAligned = stayAligned; }
 
+  public boolean getReferenceAdjustedLinearAcceleration() { return referenceAdjustedLinearAcceleration; }
+
+  public void setReferenceAdjustedLinearAcceleration(boolean value) { this.referenceAdjustedLinearAcceleration = value; }
+
 
   public TrackerDataMaskT() {
     this.info = false;
@@ -89,6 +94,7 @@ public class TrackerDataMaskT {
     this.tps = false;
     this.rawMagneticVector = false;
     this.stayAligned = false;
+    this.referenceAdjustedLinearAcceleration = false;
   }
 }
 

@@ -18,7 +18,9 @@ the same frame as rotation_reference_adjusted on a per-frame basis.
 This speaks the public SolarXR flatbuffers protocol like any other client
 (mirrors the handshake in
 ``IMUTrack-for-Spine/Assets/slimeVR/Scripts/SlimeVrRawImuDataSource.cs``).
-No SlimeVR-Server source changes are required or made.
+Newer local SlimeVR builds may additionally provide
+``reference_adjusted_linear_acceleration``. The legacy field remains
+available for A/B comparison and backward compatibility.
 
 The generated bindings live in the top-level ``solarxr_protocol`` package
 (``E:/dyh/MotionRecover/code/base_mobileposer/solarxr_protocol``), produced by::
@@ -59,6 +61,7 @@ class TrackerSample:
     quat_xyzw: Tuple[float, float, float, float]             # rotation_reference_adjusted, world frame
     accel_xyz: Tuple[float, float, float]         # linear_acceleration, m/s^2, gravity removed,
                                                     # in the SAME (raw-rotation) frame as raw_quat_xyzw
+    reference_adjusted_accel_xyz: Optional[Tuple[float, float, float]] = None
 
     @property
     def online(self) -> bool:
@@ -83,6 +86,7 @@ def _build_start_feed_request(minimum_time_since_last_ms: int) -> bytes:
         rotation=True,
         rotationReferenceAdjusted=True,
         linearAcceleration=True,
+        referenceAdjustedLinearAcceleration=True,
     )
     device_mask = DeviceDataMaskT(trackerData=tracker_mask, deviceData=True)
     config = DataFeedConfigT(
@@ -134,6 +138,7 @@ def _parse_bundle(raw: bytes) -> Dict[str, TrackerSample]:
                 raw_quat = tracker.rotation
                 quat = tracker.rotationReferenceAdjusted
                 accel = tracker.linearAcceleration
+                reference_accel = getattr(tracker, "referenceAdjustedLinearAcceleration", None)
                 if raw_quat is None or quat is None or accel is None:
                     continue
                 key = f"{device_id}:{tracker_num}"
@@ -146,6 +151,10 @@ def _parse_bundle(raw: bytes) -> Dict[str, TrackerSample]:
                     raw_quat_xyzw=(raw_quat.x, raw_quat.y, raw_quat.z, raw_quat.w),
                     quat_xyzw=(quat.x, quat.y, quat.z, quat.w),
                     accel_xyz=(accel.x, accel.y, accel.z),
+                    reference_adjusted_accel_xyz=(
+                        (reference_accel.x, reference_accel.y, reference_accel.z)
+                        if reference_accel is not None else None
+                    ),
                 )
     return samples
 

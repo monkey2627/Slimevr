@@ -460,6 +460,22 @@ class Tracker @JvmOverloads constructor(
 	}
 
 	/**
+	 * Gets linear acceleration in the same world-heading reference as
+	 * [getRotation], without applying local mounting/bone-axis corrections.
+	 * This is experimental protocol output; [getAcceleration] retains its old
+	 * semantics for SlimeVR's internal consumers.
+	 */
+	fun getFullyReferenceAdjustedAcceleration(): Vector3 {
+		if (!allowReset) return _acceleration
+
+		var rawRot = _rotation
+		if (!stayAligned.hideCorrection) {
+			rawRot = Quaternion.rotationAroundYAxis(stayAligned.yawCorrection.toRad()) * rawRot
+		}
+		return resetsHandler.getFullyReferenceAdjustedAccel(rawRot, _acceleration)
+	}
+
+	/**
 	 * Gets the raw (unadjusted) rotation of the tracker.
 	 * If this is an IMU, this will be the raw sensor rotation.
 	 */

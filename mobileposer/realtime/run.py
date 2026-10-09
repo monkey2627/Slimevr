@@ -1,19 +1,14 @@
 """End-to-end realtime bridge: SlimeVR-Server (SolarXR) -> mobileposer
 inference -> local WebSocket broadcast for the Unity receiver script.
 
-Does not modify SlimeVR-Server -- it only subscribes to its existing SolarXR
-data feed (see solarxr_client.py) as an ordinary client. SlimeVR-Server's own
-VMC/OSC output keeps running unmodified in parallel (useful as a comparison
-reference, plan M6).
+It subscribes to the SolarXR data feed as an ordinary client. The local
+SlimeVR build can optionally expose reference-adjusted linear acceleration;
+the legacy field and SlimeVR's own VMC/OSC output remain unchanged.
 
-Orientation needs no calibration (rotation_reference_adjusted is already
-usable directly, see calibration.py::bone_orientation). Acceleration DOES
-need a short startup calibration window with rotational motion -- this is not
-avoidable, see calibration.py's module docstring for why (SlimeVR-Server
-composes the raw<->reference-adjusted relationship from four private,
-unexposed quaternions; only the delta-trajectory trick used here can recover
-the one recoverable component). Once fitted, the ongoing per-frame cost is a
-single fixed matrix multiply -- streaming is real-time after that.
+The realtime path uses SlimeVR's reference-adjusted rotation and the local
+SlimeVR build's reference-adjusted linear acceleration. Startup only captures
+an upright frame window to prime MobilePose's history; no 150-frame Python
+heading fit is performed.
 
 Usage (from repo root, base_mobileposer/), with SlimeVR-Server running,
 trackers bound, and the matching no_head_5imu_surface checkpoint synced
@@ -41,7 +36,7 @@ import torch
 import websockets
 import yaml
 
-from mobileposer.realtime.calibration import UnobservableHeadingError, calibrate_heading
+from mobileposer.realtime.calibration import identity_heading
 from mobileposer.realtime.infer import DEFAULT_CHECKPOINT_ROOT, OUTPUT_LAG_FRAMES, InferenceSession, load_model
 from mobileposer.realtime.layout import LayoutMismatchError, ResolvedLayout, detect_layout
 from mobileposer.realtime.rotmat import batch_smpl_matrix_to_unity_quat_xyzw, quat_xyzw_to_unity_quat_xyzw
@@ -225,7 +220,7 @@ async def _collect_reference_window(tracker_stream, latest, resolved, frames, re
     raise RuntimeError("SolarXR stream ended during synchronized calibration")
 
 
-async def _collect_upright_calibration(tracker_stream, latest, resolved, frames, settle_seconds):
+async def _collect_upright_calibration(tracker_stream, latest, resolved, frames, settle_seconds, acceleration_source):
     print("\nStand upright in the neutral pose (feet parallel, arms relaxed).", file=sys.stderr)
     settle_seconds = max(0.0, float(settle_seconds))
     if settle_seconds > 0:
@@ -241,12 +236,34 @@ async def _collect_upright_calibration(tracker_stream, latest, resolved, frames,
             continue
         rows.append((
             np.asarray([sample.quat_xyzw for sample in samples], dtype=np.float32),
-            np.asarray([sample.accel_xyz for sample in samples], dtype=np.float32),
+            np.asarray([_sample_acceleration(sample, acceleration_source) for sample in samples], dtype=np.float32),
         ))
         if len(rows) >= frames:
             print("Upright reference captured.", file=sys.stderr)
             return rows[-1]
     raise RuntimeError("SolarXR stream ended during upright calibration")
+
+
+def _resolve_acceleration_source(requested: str, latest, resolved) -> str:
+    available = all(
+        latest.get(resolved.label_to_tracker_key[label]) is not None
+        and latest[resolved.label_to_tracker_key[label]].reference_adjusted_accel_xyz is not None
+        for label in resolved.labels
+    )
+    if requested == "server" and not available:
+        raise RuntimeError(
+            "--acceleration-source server requested, but the connected SlimeVR build "
+            "does not provide reference_adjusted_linear_acceleration for every tracker"
+        )
+    return "server" if requested == "server" or (requested == "auto" and available) else "python"
+
+
+def _sample_acceleration(sample: TrackerSample, source: str):
+    if source == "server":
+        if sample.reference_adjusted_accel_xyz is None:
+            raise RuntimeError(f"reference-adjusted acceleration disappeared for {sample.tracker_key}")
+        return sample.reference_adjusted_accel_xyz
+    return sample.accel_xyz
 
 
 async def main_async(args: argparse.Namespace) -> None:
@@ -265,6 +282,8 @@ async def main_async(args: argparse.Namespace) -> None:
     recorder_holder["latest"] = latest
 
     resolved = await _wait_for_layout(tracker_stream, latest)
+    acceleration_source = _resolve_acceleration_source(args.acceleration_source, latest, resolved)
+    print(f"Acceleration source: {acceleration_source} (requested: {args.acceleration_source})", file=sys.stderr)
 
     checkpoint = normalize_checkpoint_path(args.checkpoint) if args.checkpoint is not None else None
     contact_model = None
@@ -298,6 +317,8 @@ async def main_async(args: argparse.Namespace) -> None:
             "outputFps": args.output_fps,
             "calibrationFrames": args.calibration_frames,
             "outputLagFrames": OUTPUT_LAG_FRAMES,
+            "accelerationSourceRequested": args.acceleration_source,
+            "accelerationSourceResolved": acceleration_source,
         })
         recorder_holder["recorder"] = recorder
         atexit.register(recorder.close)
@@ -307,7 +328,7 @@ async def main_async(args: argparse.Namespace) -> None:
     if not args.skip_upright_calibration:
         upright_reference = await _collect_upright_calibration(
             tracker_stream, latest, resolved, args.upright_calibration_frames,
-            args.upright_settle_seconds,
+            args.upright_settle_seconds, acceleration_source,
         )
         if recorder is not None:
             recorder.write("upright", {
@@ -318,18 +339,9 @@ async def main_async(args: argparse.Namespace) -> None:
     if args.sync_calibration:
         await _wait_for_sync_calibration(tracker_stream, latest, resolved, recorder)
 
-    while True:
-        raw_arrays, adjusted_arrays = await _collect_heading_window(
-            tracker_stream, latest, resolved, args.calibration_frames, recorder
-        )
-        try:
-            heading = calibrate_heading(resolved.labels, raw_arrays, adjusted_arrays)
-            break
-        except UnobservableHeadingError as exc:
-            print(f"  Calibration failed, retrying: {exc}", file=sys.stderr)
-    for label, diag in heading.diagnostics.items():
-        print(f"  {label}: yaw={diag['yaw_deg']:+.1f}deg residual_p95={diag['delta_residual_p95_deg']:.2f}deg",
-              file=sys.stderr)
+    python_heading = None
+    heading = identity_heading(resolved.labels)
+    print("Using SlimeVR reference-adjusted acceleration; Python heading fit skipped.", file=sys.stderr)
     if recorder is not None:
         recorder.write("heading", {
             "labels": heading.labels,
@@ -372,7 +384,7 @@ async def main_async(args: argparse.Namespace) -> None:
                 [latest[resolved.label_to_tracker_key[label]].quat_xyzw for label in resolved.labels]
             )
             accel = np.stack(
-                [latest[resolved.label_to_tracker_key[label]].accel_xyz for label in resolved.labels]
+                [_sample_acceleration(latest[resolved.label_to_tracker_key[label]], acceleration_source) for label in resolved.labels]
             )
         except KeyError:
             continue  # a required tracker dropped out; wait for it to come back
@@ -415,6 +427,7 @@ async def main_async(args: argparse.Namespace) -> None:
             "inferenceEndMonotonicSeconds": inference_end_monotonic,
             "modelLagFrames": OUTPUT_LAG_FRAMES,
             "footContactEnabled": contact_model is not None,
+            "accelerationSource": acceleration_source,
         }
         if recorder is not None:
             tracker_rows = []
@@ -431,6 +444,7 @@ async def main_async(args: argparse.Namespace) -> None:
                     "rawQuaternion": sample.raw_quat_xyzw,
                     "referenceAdjustedQuaternion": sample.quat_xyzw,
                     "linearAccelerationMps2": sample.accel_xyz,
+                    "referenceAdjustedLinearAccelerationMps2": sample.reference_adjusted_accel_xyz,
                 })
             local = output.detach().numpy()
             global_rot = np.empty_like(local)
@@ -450,7 +464,8 @@ async def main_async(args: argparse.Namespace) -> None:
                 "footContact": contact,
             }
         await broadcaster.broadcast(
-            frame_index, resolved.name, quats_out, contact, tracker_rotations, diagnostics)
+            frame_index, resolved.name, quats_out, contact, tracker_rotations, diagnostics,
+        )
         if recorder is not None:
             frame_record["broadcastMonotonicSeconds"] = time.perf_counter()
             recorder.write("inferenceFrame", frame_record)
@@ -464,8 +479,10 @@ def main() -> None:
     parser.add_argument("--web", action="store_true", help="serve a browser-based realtime stick-figure viewer")
     parser.add_argument("--web-host", default="127.0.0.1", help="web viewer bind address")
     parser.add_argument("--web-port", type=int, default=8765, help="web viewer HTTP port")
-    parser.add_argument("--calibration-frames", type=int, default=150,
-                         help="frames to collect (while moving/rotating) for the startup heading fit, ~5s at 30Hz")
+    parser.add_argument("--calibration-frames", type=int, default=0,
+                         help="deprecated compatibility option; no Python heading fit is performed")
+    parser.add_argument("--acceleration-source", choices=("server",), default="server",
+                         help="use SlimeVR reference-adjusted acceleration")
     parser.add_argument("--checkpoint-root", type=Path, default=DEFAULT_CHECKPOINT_ROOT,
                          help="root directory containing <layout>/1/base_model.pth checkpoints")
     parser.add_argument("--checkpoint", type=Path, default=None,
@@ -477,7 +494,7 @@ def main() -> None:
     parser.add_argument("--output-fps", type=float, default=30.0,
                          help="maximum pose broadcasts/inferences per second (default: 30)")
     parser.add_argument("--sync-calibration", action="store_true",
-                         help="pause for manual SlimeVR upright and ski calibration before heading fit")
+                         help="pause for manual SlimeVR upright and ski calibration")
     parser.add_argument("--upright-calibration-frames", type=int, default=30,
                          help="neutral-pose samples used to prime the model context (default: 30)")
     parser.add_argument("--upright-settle-seconds", type=float, default=3.0,
@@ -491,7 +508,7 @@ def main() -> None:
     args = parser.parse_args()
     config = _load_runtime_config(args.config)
     defaults = {
-        "calibration_frames": 150,
+        "calibration_frames": 0,
         "checkpoint_root": DEFAULT_CHECKPOINT_ROOT,
         "output_fps": 30.0,
         "upright_calibration_frames": 30,

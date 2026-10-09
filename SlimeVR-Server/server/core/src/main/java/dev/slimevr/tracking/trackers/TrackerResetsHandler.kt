@@ -196,6 +196,30 @@ class TrackerResetsHandler(val tracker: Tracker) {
 	fun getReferenceAdjustedAccel(rawRot: Quaternion, accel: Vector3): Vector3 = rawRot.sandwich(accel)
 
 	/**
+	 * Converts a tracker-local acceleration vector to the same world-heading
+	 * reference used by the reference-adjusted rotation.
+	 *
+	 * Only corrections applied on the world (left) side of the rotation chain
+	 * belong here. Mounting orientation, attachment fix and T-pose corrections
+	 * are local-axis (right-side) corrections and must not rotate an acceleration
+	 * that [rawRot] has already expressed in world space.
+	 */
+	fun getFullyReferenceAdjustedAccel(rawRot: Quaternion, accel: Vector3): Vector3 {
+		var adjusted = rawRot.sandwich(accel)
+		adjusted = gyroFix.sandwich(adjusted)
+		adjusted = mountRotFix.inv().sandwich(adjusted)
+		adjusted = yawFix.sandwich(adjusted)
+		adjusted = constraintFix.sandwich(adjusted)
+		adjusted = getDriftCorrection().sandwich(adjusted)
+
+		if (tracker.yawResetSmoothing.remainingTime > 0f) {
+			adjusted = tracker.yawResetSmoothing.curRotation.sandwich(adjusted)
+		}
+
+		return adjusted
+	}
+
+	/**
 	 * Converts raw or filtered rotation into reference- and
 	 * mounting-reset-adjusted by applying quaternions produced after
 	 * full reset, yaw rest and mounting reset
@@ -243,14 +267,17 @@ class TrackerResetsHandler(val tracker: Tracker) {
 	 * and returns it
 	 */
 	private fun adjustToDrift(rotation: Quaternion): Quaternion {
-		if (driftCompensationEnabled && totalDriftTime > 0) {
-			var driftTimeRatio = ((System.currentTimeMillis() - driftSince).toFloat() / totalDriftTime)
-			if (!driftPrediction) {
-				driftTimeRatio = min(1.0f, driftTimeRatio)
-			}
-			return averagedDriftQuat.pow(driftAmount * driftTimeRatio) * rotation
+		return getDriftCorrection() * rotation
+	}
+
+	private fun getDriftCorrection(): Quaternion {
+		if (!driftCompensationEnabled || totalDriftTime <= 0) return Quaternion.IDENTITY
+
+		var driftTimeRatio = ((System.currentTimeMillis() - driftSince).toFloat() / totalDriftTime)
+		if (!driftPrediction) {
+			driftTimeRatio = min(1.0f, driftTimeRatio)
 		}
-		return rotation
+		return averagedDriftQuat.pow(driftAmount * driftTimeRatio)
 	}
 
 	/**

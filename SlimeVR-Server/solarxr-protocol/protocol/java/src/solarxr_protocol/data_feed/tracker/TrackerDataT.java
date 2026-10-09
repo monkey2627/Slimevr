@@ -22,6 +22,7 @@ public class TrackerDataT {
   private Integer tps;
   private solarxr_protocol.datatypes.math.Vec3fT rawMagneticVector;
   private solarxr_protocol.data_feed.stay_aligned.StayAlignedTrackerT stayAligned;
+  private solarxr_protocol.datatypes.math.Vec3fT referenceAdjustedLinearAcceleration;
 
   public solarxr_protocol.datatypes.TrackerIdT getTrackerId() { return trackerId; }
 
@@ -79,6 +80,10 @@ public class TrackerDataT {
 
   public void setStayAligned(solarxr_protocol.data_feed.stay_aligned.StayAlignedTrackerT stayAligned) { this.stayAligned = stayAligned; }
 
+  public solarxr_protocol.datatypes.math.Vec3fT getReferenceAdjustedLinearAcceleration() { return referenceAdjustedLinearAcceleration; }
+
+  public void setReferenceAdjustedLinearAcceleration(solarxr_protocol.datatypes.math.Vec3fT value) { this.referenceAdjustedLinearAcceleration = value; }
+
 
   public TrackerDataT() {
     this.trackerId = null;
@@ -95,6 +100,7 @@ public class TrackerDataT {
     this.tps = null;
     this.rawMagneticVector = new solarxr_protocol.datatypes.math.Vec3fT();
     this.stayAligned = null;
+    this.referenceAdjustedLinearAcceleration = new solarxr_protocol.datatypes.math.Vec3fT();
   }
 }
 

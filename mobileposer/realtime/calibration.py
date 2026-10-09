@@ -193,6 +193,15 @@ class HeadingCalibration:
         return apply_heading(self.heading, accel_xyz)
 
 
+def identity_heading(labels: List[str]) -> HeadingCalibration:
+    """Coordinate conversion only, for server reference-adjusted acceleration."""
+    return HeadingCalibration(
+        labels=list(labels),
+        heading=torch.eye(3, dtype=torch.float32).repeat(len(labels), 1, 1),
+        diagnostics={},
+    )
+
+
 def calibrate_heading(
     labels: List[str],
     raw_quat_xyzw_by_label: Dict[str, np.ndarray],

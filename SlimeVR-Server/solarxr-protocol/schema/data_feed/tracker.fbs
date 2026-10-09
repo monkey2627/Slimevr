@@ -55,6 +55,11 @@ table TrackerData {
 
     /// Stay Aligned
     stay_aligned: solarxr_protocol.data_feed.stay_aligned.StayAlignedTracker;
+
+    /// Linear acceleration transformed with the same world-reference correction
+    /// as rotation_reference_adjusted. This excludes local mounting/bone-axis
+    /// corrections and is intended for experimental external consumers.
+    reference_adjusted_linear_acceleration: solarxr_protocol.datatypes.math.Vec3f;
 }
 
 /// A mask of the different components in `TrackerComponent`
@@ -72,6 +77,7 @@ table TrackerDataMask {
     tps: bool;
     raw_magnetic_vector: bool;
     stay_aligned: bool;
+    reference_adjusted_linear_acceleration: bool;
 }
 
 /// Static description of a tracker

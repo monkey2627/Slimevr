@@ -40,7 +40,8 @@ class PoseBroadcaster:
     async def broadcast(self, frame_index: int, layout_name: str, joints_xyzw: np.ndarray,
                         contact: np.ndarray | None = None,
                         tracker_rotations: np.ndarray | None = None,
-                        diagnostics: dict | None = None) -> None:
+                        diagnostics: dict | None = None,
+                        comparison: dict | None = None) -> None:
         """joints_xyzw: (24, 4) array of (x, y, z, w) local-rotation quaternions,
         already converted to Unity's left-handed convention (see
         rotmat.batch_smpl_matrix_to_unity_quat_xyzw), in mobileposer's fixed
@@ -65,6 +66,8 @@ class PoseBroadcaster:
             message["trackerRotations"] = np.asarray(tracker_rotations, dtype=np.float32).reshape(-1).tolist()
         if diagnostics:
             message.update(diagnostics)
+        if comparison:
+            message["comparison"] = comparison
         payload = json.dumps(message)
         stale = []
         for client in self._clients:

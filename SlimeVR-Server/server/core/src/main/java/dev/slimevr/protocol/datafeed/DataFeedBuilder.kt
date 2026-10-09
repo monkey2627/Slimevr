@@ -177,6 +177,9 @@ fun createTrackerRotation(fbb: FlatBufferBuilder, tracker: Tracker): Int = creat
 
 fun createTrackerAcceleration(fbb: FlatBufferBuilder, tracker: Tracker): Int = createVec3(fbb, tracker.getAcceleration())
 
+fun createReferenceAdjustedTrackerAcceleration(fbb: FlatBufferBuilder, tracker: Tracker): Int =
+	createVec3(fbb, tracker.getFullyReferenceAdjustedAcceleration())
+
 fun createTrackerMagneticVector(fbb: FlatBufferBuilder, tracker: Tracker): Int = createVec3(fbb, tracker.getMagVector())
 
 fun createTrackerTemperature(fbb: FlatBufferBuilder, tracker: Tracker): Int {
@@ -221,6 +224,13 @@ fun createTrackerData(
 			.addLinearAcceleration(
 				fbb,
 				createTrackerAcceleration(fbb, tracker),
+			)
+	}
+	if (mask.referenceAdjustedLinearAcceleration && tracker.hasAcceleration && tracker.allowReset) {
+		TrackerData
+			.addReferenceAdjustedLinearAcceleration(
+				fbb,
+				createReferenceAdjustedTrackerAcceleration(fbb, tracker),
 			)
 	}
 	if (mask.temp) {

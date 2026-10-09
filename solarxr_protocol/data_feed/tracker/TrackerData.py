@@ -196,8 +196,17 @@ class TrackerData(object):
             return obj
         return None
 
+    def ReferenceAdjustedLinearAcceleration(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(32))
+        if o != 0:
+            x = o + self._tab.Pos
+            obj = Vec3f()
+            obj.Init(self._tab.Bytes, x)
+            return obj
+        return None
+
 def TrackerDataStart(builder):
-    builder.StartObject(14)
+    builder.StartObject(15)
 
 def Start(builder):
     TrackerDataStart(builder)
@@ -286,6 +295,12 @@ def TrackerDataAddStayAligned(builder, stayAligned):
 def AddStayAligned(builder, stayAligned):
     TrackerDataAddStayAligned(builder, stayAligned)
 
+def TrackerDataAddReferenceAdjustedLinearAcceleration(builder, referenceAdjustedLinearAcceleration):
+    builder.PrependStructSlot(14, flatbuffers.number_types.UOffsetTFlags.py_type(referenceAdjustedLinearAcceleration), 0)
+
+def AddReferenceAdjustedLinearAcceleration(builder, referenceAdjustedLinearAcceleration):
+    TrackerDataAddReferenceAdjustedLinearAcceleration(builder, referenceAdjustedLinearAcceleration)
+
 def TrackerDataEnd(builder):
     return builder.EndObject()
 
@@ -316,6 +331,7 @@ class TrackerDataT(object):
         tps = None,
         rawMagneticVector = None,
         stayAligned = None,
+        referenceAdjustedLinearAcceleration = None,
     ):
         self.trackerId = trackerId  # type: Optional[TrackerIdT]
         self.info = info  # type: Optional[TrackerInfoT]
@@ -331,6 +347,7 @@ class TrackerDataT(object):
         self.tps = tps  # type: Optional[int]
         self.rawMagneticVector = rawMagneticVector  # type: Optional[Vec3fT]
         self.stayAligned = stayAligned  # type: Optional[StayAlignedTrackerT]
+        self.referenceAdjustedLinearAcceleration = referenceAdjustedLinearAcceleration  # type: Optional[Vec3fT]
 
     @classmethod
     def InitFromBuf(cls, buf, pos):
@@ -379,6 +396,8 @@ class TrackerDataT(object):
             self.rawMagneticVector = Vec3fT.InitFromObj(trackerData.RawMagneticVector())
         if trackerData.StayAligned() is not None:
             self.stayAligned = StayAlignedTrackerT.InitFromObj(trackerData.StayAligned())
+        if trackerData.ReferenceAdjustedLinearAcceleration() is not None:
+            self.referenceAdjustedLinearAcceleration = Vec3fT.InitFromObj(trackerData.ReferenceAdjustedLinearAcceleration())
 
     # TrackerDataT
     def Pack(self, builder):
@@ -424,5 +443,8 @@ class TrackerDataT(object):
             TrackerDataAddRawMagneticVector(builder, rawMagneticVector)
         if self.stayAligned is not None:
             TrackerDataAddStayAligned(builder, stayAligned)
+        if self.referenceAdjustedLinearAcceleration is not None:
+            referenceAdjustedLinearAcceleration = self.referenceAdjustedLinearAcceleration.Pack(builder)
+            TrackerDataAddReferenceAdjustedLinearAcceleration(builder, referenceAdjustedLinearAcceleration)
         trackerData = TrackerDataEnd(builder)
         return trackerData
