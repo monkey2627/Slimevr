@@ -1,11 +1,9 @@
 """Real-time mobileposer inference: turn calibrated per-tracker samples into
 the 45-frame sliding window mobile_export.MobilePose expects, and run it.
 
-Reuses mobile_export.MobilePose as-is -- it loads the exact same
-"no_head_5imu_surface" checkpoints as the android export path, and is already
-validated there to be bit-exact with mobileposer.models.MobilePoserNet within
-1e-4 -- instead of re-implementing the joints/pose regression and
-kinematic-tree (global -> local) reconstruction.
+Reuses the inference-only mobile_export.MobilePose wrapper. It loads the
+combined checkpoint and reconstructs the SMPL kinematic tree from global to
+local rotations without importing the historical training model package.
 """
 from __future__ import annotations
 

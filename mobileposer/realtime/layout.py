@@ -2,9 +2,9 @@
 
 SlimeVR-Server assigns each tracker a ``BodyPart`` (see
 ``SlimeVR-Server/server/core/.../tracking/trackers/TrackerPosition.kt`` on the
-Kotlin side, or ``solarxr_protocol.datatypes.BodyPart`` on the wire). mobileposer's
-``no_head_5imu_surface`` checkpoints are trained per fixed 5-sensor layout, named
-and defined in ``mobileposer.no_head_layouts.LAYOUTS``. This module bridges the two:
+Kotlin side, or ``solarxr_protocol.datatypes.BodyPart`` on the wire). MobilePose
+checkpoints are trained per fixed 5-sensor layout. This module bridges the live
+tracker set to those runtime layout definitions:
 given the set of currently-online tracker body parts, it figures out (without any
 hardcoded/static config) which one of the six trained layouts -- if any -- matches
 exactly.
@@ -19,15 +19,15 @@ from __future__ import annotations
 import dataclasses
 from typing import Dict, FrozenSet, List, Optional
 
-from mobileposer.no_head_layouts import LAYOUTS
+from mobileposer.realtime.layouts import LAYOUTS
 from mobileposer.realtime.solarxr_client import TrackerSample
 from solarxr_protocol.datatypes.BodyPart import BodyPart
 
-# BodyPart -> mobileposer surface-attachment label. Only the 11 body parts used
-# by the six no_head_5imu_surface layouts are mapped; everything else (hands,
+# BodyPart -> MobilePose input label. Only the 11 body parts used by the six
+# supported layouts are mapped; everything else (hands,
 # fingers, head, chest, ...) is irrelevant to this checkpoint family.
 BODY_PART_TO_LABEL: Dict[int, str] = {
-    BodyPart.LEFT_LOWER_ARM: "lw",    # forearm -- "wrist" sensor, see surface_imu.py
+    BodyPart.LEFT_LOWER_ARM: "lw",    # forearm-mounted "wrist" input slot
     BodyPart.RIGHT_LOWER_ARM: "rw",
     BodyPart.LEFT_UPPER_ARM: "lu",
     BodyPart.RIGHT_UPPER_ARM: "ru",
@@ -41,8 +41,7 @@ BODY_PART_TO_LABEL: Dict[int, str] = {
 }
 LABEL_TO_BODY_PART: Dict[str, int] = {v: k for k, v in BODY_PART_TO_LABEL.items()}
 
-# name -> frozenset(labels), derived once from the authoritative training-time
-# definitions in no_head_layouts.py so this can never drift out of sync with it.
+# name -> frozenset(labels).
 _LAYOUT_LABEL_SETS: Dict[str, FrozenSet[str]] = {
     name: frozenset(spec["labels"]) for name, spec in LAYOUTS.items()
 }

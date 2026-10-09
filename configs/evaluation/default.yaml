@@ -1,5 +1,0 @@
-purpose: realtime_input_and_pose_diagnostics
-layout: wrists_shanks_waist
-fps: 30
-rotation_error_units: degrees
-acceleration_units: m/s2

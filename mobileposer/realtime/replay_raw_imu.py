@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from mobileposer.no_head_layouts import LAYOUTS
+from mobileposer.realtime.layouts import LAYOUTS
 from mobileposer.realtime.calibration import calibrate_heading
 from mobileposer.realtime.infer import InferenceSession, load_model
 from mobileposer.mobile_export import MobilePose

@@ -19,7 +19,7 @@ IMU 固件融合 → SlimeVR Server 校准/人体解算 → Unity Avatar
 
 `raw-imu.json` 与 `motion.json` 是并行产物，不能把 Avatar 姿态当成原始 IMU。当前 `raw-imu.json` 为 SolarXR 记录的线性加速度和多种四元数。
 
-surface IMU 的训练定义位于 [`surface_imu.py`](../mobileposer/surface_imu.py)、[`no_head_surface_imu.json`](../mobileposer/configs/no_head_surface_imu.json) 和 [`no_head_layouts.py`](../mobileposer/no_head_layouts.py)：固定 SMPL 表面三角面、重心权重和骨段方向，再生成加速度与方向监督。
+surface IMU 的训练定义曾位于 `surface_imu.py`、`no_head_surface_imu.json` 和 `no_head_layouts.py`；这些属于历史训练链路，当前实时入口不再依赖它们。
 
 ## 传感器与布局映射
 
@@ -48,7 +48,7 @@ surface IMU 的训练定义位于 [`surface_imu.py`](../mobileposer/surface_imu.
 
 ## 输入适配实现
 
-主代码为 [`test_ours_surface.py`](../mobileposer/test_ours_surface.py)。它完成：
+历史主代码为 `test_ours_surface.py`。它完成：
 
 1. 校验 `manifest.json` 中 raw-imu SHA256；
 2. 验证采样时间单调、无明显丢帧；
@@ -148,10 +148,10 @@ OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
 |---|---|
 |原始数据|`data/raw/ours/1`|
 |链路说明|`docs/11_IMU到动作导出全链路.md`|
-|surface 选点|`mobileposer/surface_imu.py`|
+|surface 选点|历史文件 `mobileposer/surface_imu.py`|
 |surface 配置|`mobileposer/configs/no_head_surface_imu.json`|
-|布局和训练数据定义|`mobileposer/no_head_layouts.py`|
-|实体 IMU 适配与推理|`mobileposer/test_ours_surface.py`|
+|布局和训练数据定义|历史文件 `mobileposer/no_head_layouts.py`|
+|实体 IMU 适配与推理|历史文件 `mobileposer/test_ours_surface.py`|
 |同动作微调|`mobileposer/smoke_finetune_ours.py`|
 |HumanPose 导出|`IMUTrack-for-Spine/Assets/Editor/HumanPoseJointExporter.cs`|
 |初始推理结果|`results/ours1_surface_motionjson`|
