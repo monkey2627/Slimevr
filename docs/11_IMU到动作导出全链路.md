@@ -243,4 +243,4 @@ Unity 侧负责接收 SlimeVR 输出、驱动 Avatar、并行记录 Tracker/Raw 
 2. `mobileposer.finetune_ours_multi.py` 使用这些真实录制输入微调指定布局，并生成 `model_finetuned.pth`。
 3. 实时使用由 `mobileposer.realtime.run` 完成，输入仍来自运行中的 SlimeVR/SolarXR，而不是重新读取 Unity 动作包。
 
-实时入口的正确命令参数是 `--web`；`--web5` 不是当前源码支持的参数。完整的真实微调和实时输入说明见 `5IMU自定义位置训练_数据流与模型输入.md` 第 10、11 节。
+实时入口的正确命令参数是 `--web`；`--web5` 不是当前源码支持的参数。完整的真实微调和实时输入说明见 `10_训练数据流与模型输入.md` 第 10、11 节。

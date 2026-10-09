@@ -10,7 +10,7 @@
 
 ## 已理解的原始链路
 
-原始链路记录在 [`IMU到动作导出全链路.md`](IMUTrack-for-Spine/IMU到动作导出全链路.md)：
+原始链路记录在 [IMU 到动作导出全链路](11_IMU到动作导出全链路.md)：
 
 ```text
 IMU 固件融合 → SlimeVR Server 校准/人体解算 → Unity Avatar
@@ -19,7 +19,7 @@ IMU 固件融合 → SlimeVR Server 校准/人体解算 → Unity Avatar
 
 `raw-imu.json` 与 `motion.json` 是并行产物，不能把 Avatar 姿态当成原始 IMU。当前 `raw-imu.json` 为 SolarXR 记录的线性加速度和多种四元数。
 
-surface IMU 的训练定义位于 [`surface_imu.py`](mobileposer/surface_imu.py)、[`no_head_surface_imu.json`](mobileposer/configs/no_head_surface_imu.json) 和 [`no_head_layouts.py`](mobileposer/no_head_layouts.py)：固定 SMPL 表面三角面、重心权重和骨段方向，再生成加速度与方向监督。
+surface IMU 的训练定义位于 [`surface_imu.py`](../mobileposer/surface_imu.py)、[`no_head_surface_imu.json`](../mobileposer/configs/no_head_surface_imu.json) 和 [`no_head_layouts.py`](../mobileposer/no_head_layouts.py)：固定 SMPL 表面三角面、重心权重和骨段方向，再生成加速度与方向监督。
 
 ## 传感器与布局映射
 
@@ -48,7 +48,7 @@ surface IMU 的训练定义位于 [`surface_imu.py`](mobileposer/surface_imu.py)
 
 ## 输入适配实现
 
-主代码为 [`test_ours_surface.py`](mobileposer/test_ours_surface.py)。它完成：
+主代码为 [`test_ours_surface.py`](../mobileposer/test_ours_surface.py)。它完成：
 
 1. 校验 `manifest.json` 中 raw-imu SHA256；
 2. 验证采样时间单调、无明显丢帧；
@@ -76,11 +76,11 @@ OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
 
 - `results/ours1_surface_realimu` 中旧的 FBX 参考视频和数值已标记作废；
 - 当前正式参考改为 Unity `HumanPoseHandler.SetHumanPose` 播放 `motion.json`；
-- 使用项目中的 `mesh_edit1.vrm` 和 [`HumanPoseJointExporter.cs`](IMUTrack-for-Spine/Assets/Editor/HumanPoseJointExporter.cs)；
+- 使用项目中的 `mesh_edit1.vrm` 和当时的 `IMUTrack-for-Spine/Assets/Editor/HumanPoseJointExporter.cs`（该历史脚本当前已不在仓库中）；
 - 参考按 `motion.json` 实际时间戳与 IMU 对齐；
 - 当前预测输入没有使用 FBX 或 Avatar 姿态。
 
-正式参考结果目录：[`results/ours1_surface_motionjson`](results/ours1_surface_motionjson)
+正式参考结果目录：`results/ours1_surface_motionjson`（历史产物，当前工作区未保留）
 
 其中：
 
@@ -108,7 +108,7 @@ OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
 
 ## 同动作微调 smoke test
 
-用户目标是验证：在同一个 `ours/1` 动作上微调后，再预测该动作是否改善。为此新增 [`smoke_finetune_ours.py`](mobileposer/smoke_finetune_ours.py)。
+用户目标是验证：在同一个 `ours/1` 动作上微调后，再预测该动作是否改善。为此新增 [`smoke_finetune_ours.py`](../mobileposer/smoke_finetune_ours.py)。
 
 实验定义：
 
@@ -130,7 +130,7 @@ OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
 --output results/ours1_overfit_smoke_new
 ```
 
-结果目录：[`results/ours1_overfit_smoke`](results/ours1_overfit_smoke)
+结果目录：`results/ours1_overfit_smoke`（历史产物，当前工作区未保留）
 
 |布局|SMPL 伪标签 MPJPE 前 → 后|Avatar 差异前 → 后|
 |---|---:|---:|
@@ -147,7 +147,7 @@ OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
 |用途|位置|
 |---|---|
 |原始数据|`data/raw/ours/1`|
-|链路说明|`IMUTrack-for-Spine/IMU到动作导出全链路.md`|
+|链路说明|`docs/11_IMU到动作导出全链路.md`|
 |surface 选点|`mobileposer/surface_imu.py`|
 |surface 配置|`mobileposer/configs/no_head_surface_imu.json`|
 |布局和训练数据定义|`mobileposer/no_head_layouts.py`|

@@ -8,7 +8,8 @@ SlimeVR -> SolarXR -> MobilePose -> SMPL 24 joints
 ```
 
 当前重点不是继续调整 Unity，而是定位自然站立时实时 IMU 输入与训练数据之间的固定旋转偏差。
-项目状态、已验证结论、启动命令、目录说明和下一步任务见 [HANDOFF.md](HANDOFF.md)。
+完整文档按阅读顺序收录在 [docs/README.md](docs/README.md)。当前状态、已验证结论和下一步任务见
+[项目交接](docs/22_项目交接.md)。
 
 ## 核心目录
 
